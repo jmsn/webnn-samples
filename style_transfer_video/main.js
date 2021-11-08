@@ -6,11 +6,10 @@ import * as utils from '../common/utils.js';
 
 const maxWidth = 380;
 const maxHeight = 380;
-let videoElement;
 let modelId = 'starry-night';
 let isFirstTimeLoad = true;
 let isModelChanged = false;
-let rafReq;
+let frameReq;
 const inputType = 'video';
 let fastStyleTransferNet;
 let loadTime = 0;
@@ -28,7 +27,9 @@ $(document).ready(() => {
 
 $('#deviceBtns .btn').on('change', async (e) => {
   devicePreference = $(e.target).attr('id');
-  if (inputType === 'video') cancelAnimationFrame(rafReq);
+  if (inputType === 'video' && player) {
+    player.getVideoElement().cancelVideoFrameCallback(frameReq);
+  }
   await main();
 });
 
@@ -44,7 +45,9 @@ $('#gallery .gallery-image').hover((e) => {
 // Click trigger to do inference with switched <img> element
 $('#gallery .gallery-item').click(async (e) => {
   const newModelId = $(e.target).attr('id');
-  if (inputType === 'video') cancelAnimationFrame(rafReq);
+  if (inputType === 'video' && player) {
+    player.getVideoElement().cancelVideoFrameCallback(frameReq);
+  }
 
   if (newModelId !== modelId) {
     isModelChanged = true;
@@ -58,10 +61,7 @@ $('#gallery .gallery-item').click(async (e) => {
   await main();
 });
 
-/**
- * This method is used to render video tab.
- */
-async function renderVideoFrames() {
+async function renderVideoFrame(videoElement) {
   const inputBuffer =
       utils.getInputTensor(videoElement, fastStyleTransferNet.inputOptions);
   console.log('- Computing... ');
@@ -75,7 +75,9 @@ async function renderVideoFrames() {
   showPerfResult();
   drawOutput('inputCanvas', 'outputCanvas');
   $('#fps').text(`${(1000/computeTime).toFixed(0)} FPS`);
-  rafReq = requestAnimationFrame(renderVideoFrames);
+  frameReq = videoElement.requestVideoFrameCallback(function() {
+    renderVideoFrame(videoElement);
+  });
 }
 
 function drawInput(srcElement, canvasId) {
@@ -224,11 +226,10 @@ export async function main() {
           const qualities = player.getAvailableVideoQualities();
           player.setVideoQuality(qualities[0].id);
           player.preload();
-          videoElement = player.getVideoElement();
-          renderVideoFrames();
+          renderVideoFrame(player.getVideoElement());
         });
       } else {
-        renderVideoFrames();
+        renderVideoFrame(player.getVideoElement());
       }
 
       await showProgressComponent('done', 'done', 'done');
