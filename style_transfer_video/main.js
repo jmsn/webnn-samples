@@ -10,7 +10,6 @@ let modelId = 'starry-night';
 let isFirstTimeLoad = true;
 let isModelChanged = false;
 let frameReq;
-const inputType = 'video';
 let fastStyleTransferNet;
 let loadTime = 0;
 let buildTime = 0;
@@ -27,9 +26,11 @@ $(document).ready(() => {
 
 $('#deviceBtns .btn').on('change', async (e) => {
   devicePreference = $(e.target).attr('id');
-  if (inputType === 'video' && player) {
+
+  if (player) {
     player.getVideoElement().cancelVideoFrameCallback(frameReq);
   }
+
   await main();
 });
 
@@ -42,10 +43,10 @@ $('#gallery .gallery-image').hover((e) => {
   $('.badge').html(modelName);
 });
 
-// Click trigger to do inference with switched <img> element
 $('#gallery .gallery-item').click(async (e) => {
   const newModelId = $(e.target).attr('id');
-  if (inputType === 'video' && player) {
+
+  if (player) {
     player.getVideoElement().cancelVideoFrameCallback(frameReq);
   }
 
@@ -199,44 +200,40 @@ export async function main() {
     // UI shows inferencing progress
     await showProgressComponent('done', 'done', 'current');
 
-    if (inputType === 'video') {
-      if (!player) {
-        const conf = {
-          key: 'yolo',
-          playback: {
-            autoplay: true,
-            muted: true,
-          },
-          location: {
-            ui: 'https://cdn.bitmovin.com/player/web/8/bitmovinplayer-ui.js',
-            ui_css: 'https://cdn.bitmovin.com/player/web/8/bitmovinplayer-ui.css',
-          },
-          adaptation: {
-            preload: false,
-          },
-        };
+    if (!player) {
+      const conf = {
+        key: 'yolo',
+        playback: {
+          autoplay: true,
+          muted: true,
+        },
+        location: {
+          ui: 'https://cdn.bitmovin.com/player/web/8/bitmovinplayer-ui.js',
+          ui_css: 'https://cdn.bitmovin.com/player/web/8/bitmovinplayer-ui.css',
+        },
+        adaptation: {
+          preload: false,
+        },
+      };
 
+      // eslint-disable-next-line max-len
+      player = new window.bitmovin.player.Player(document.getElementById('player'), conf);
+      const source = {
         // eslint-disable-next-line max-len
-        player = new window.bitmovin.player.Player(document.getElementById('player'), conf);
-        const source = {
-          // eslint-disable-next-line max-len
-          dash: '//bitmovin-a.akamaihd.net/content/MI201109210084_1/mpds/f08e80da-bf1d-4e3d-8899-f0f6155f6efa.mpd',
-        };
-        player.load(source).then(function() {
-          const qualities = player.getAvailableVideoQualities();
-          player.setVideoQuality(qualities[0].id);
-          player.preload();
-          renderVideoFrame(player.getVideoElement());
-        });
-      } else {
+        dash: '//bitmovin-a.akamaihd.net/content/MI201109210084_1/mpds/f08e80da-bf1d-4e3d-8899-f0f6155f6efa.mpd',
+      };
+      player.load(source).then(function() {
+        const qualities = player.getAvailableVideoQualities();
+        player.setVideoQuality(qualities[0].id);
+        player.preload();
         renderVideoFrame(player.getVideoElement());
-      }
-
-      await showProgressComponent('done', 'done', 'done');
-      readyShowResultComponents();
+      });
     } else {
-      throw Error(`Unknown inputType ${inputType}`);
+      renderVideoFrame(player.getVideoElement());
     }
+
+    await showProgressComponent('done', 'done', 'done');
+    readyShowResultComponents();
   } catch (error) {
     console.log(error);
     addWarning(error.message);
