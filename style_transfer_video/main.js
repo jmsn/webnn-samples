@@ -1,0 +1,243 @@
+'use strict';
+
+import {FastStyleTransferNet} from './fast_style_transfer_net.js';
+import {showProgressComponent, readyShowResultComponents} from '../common/ui.js';
+import * as utils from '../common/utils.js';
+
+const maxWidth = 380;
+const maxHeight = 380;
+let videoElement;
+let modelId = 'starry-night';
+let isFirstTimeLoad = true;
+let isModelChanged = false;
+let rafReq;
+const inputType = 'video';
+let fastStyleTransferNet;
+let loadTime = 0;
+let buildTime = 0;
+let computeTime = 0;
+let outputBuffer;
+let devicePreference = 'gpu';
+let lastDevicePreference = '';
+let player;
+
+$(document).ready(() => {
+  $('.icdisplay').hide();
+  $('.badge').html(modelId);
+});
+
+$('#deviceBtns .btn').on('change', async (e) => {
+  devicePreference = $(e.target).attr('id');
+  if (inputType === 'video') cancelAnimationFrame(rafReq);
+  await main();
+});
+
+$('#gallery .gallery-image').hover((e) => {
+  const id = $(e.target).attr('id');
+  const modelName = $('#' + id).attr('title');
+  $('.badge').html(modelName);
+}, () => {
+  const modelName = $(`#${modelId}`).attr('title');
+  $('.badge').html(modelName);
+});
+
+// Click trigger to do inference with switched <img> element
+$('#gallery .gallery-item').click(async (e) => {
+  const newModelId = $(e.target).attr('id');
+  if (inputType === 'video') cancelAnimationFrame(rafReq);
+
+  if (newModelId !== modelId) {
+    isModelChanged = true;
+    modelId = newModelId;
+    const modelName = $(`#${modelId}`).attr('title');
+    $('.badge').html(modelName);
+    $('#gallery .gallery-item').removeClass('hl');
+    $(e.target).parent().addClass('hl');
+  }
+
+  await main();
+});
+
+/**
+ * This method is used to render video tab.
+ */
+async function renderVideoFrames() {
+  const inputBuffer =
+      utils.getInputTensor(videoElement, fastStyleTransferNet.inputOptions);
+  console.log('- Computing... ');
+  const start = performance.now();
+  fastStyleTransferNet.compute(inputBuffer, outputBuffer);
+  computeTime = (performance.now() - start).toFixed(2);
+  console.log(`  done in ${computeTime} ms.`);
+  videoElement.width = videoElement.videoWidth;
+  videoElement.height = videoElement.videoHeight;
+  drawInput(videoElement, 'inputCanvas');
+  showPerfResult();
+  drawOutput('inputCanvas', 'outputCanvas');
+  $('#fps').text(`${(1000/computeTime).toFixed(0)} FPS`);
+  rafReq = requestAnimationFrame(renderVideoFrames);
+}
+
+function drawInput(srcElement, canvasId) {
+  const inputCanvas = document.getElementById(canvasId);
+  const resizeRatio = Math.max(
+      Math.max(srcElement.width / maxWidth, srcElement.height / maxHeight), 1);
+  const scaledWidth = Math.floor(srcElement.width / resizeRatio);
+  const scaledHeight = Math.floor(srcElement.height / resizeRatio);
+  inputCanvas.height = scaledHeight;
+  inputCanvas.width = scaledWidth;
+  const ctx = inputCanvas.getContext('2d');
+  ctx.drawImage(srcElement, 0, 0, scaledWidth, scaledHeight);
+}
+
+function drawOutput(inCanvasId, outCanvasId) {
+  const outputSize = fastStyleTransferNet.outputDimensions;
+  const height = outputSize[2];
+  const width = outputSize[3];
+  const mean = [1, 1, 1, 1];
+  const offset = [0, 0, 0, 0];
+  const bytes = new Uint8ClampedArray(width * height * 4);
+  const a = 255;
+
+  for (let i = 0; i < height * width; ++i) {
+    const j = i * 4;
+    const r = outputBuffer[i] * mean[0] + offset[0];
+    const g = outputBuffer[i + height * width] * mean[1] + offset[1];
+    const b = outputBuffer[i + height * width * 2] * mean[2] + offset[2];
+    bytes[j + 0] = Math.round(r);
+    bytes[j + 1] = Math.round(g);
+    bytes[j + 2] = Math.round(b);
+    bytes[j + 3] = Math.round(a);
+  }
+
+  const imageData = new ImageData(bytes, width, height);
+  const outCanvas = document.createElement('canvas');
+  const outCtx = outCanvas.getContext('2d');
+  outCanvas.width = width;
+  outCanvas.height = height;
+  outCtx.putImageData(imageData, 0, 0, 0, 0, outCanvas.width, outCanvas.height);
+
+  const inputCanvas = document.getElementById(inCanvasId);
+  const outputCanvas = document.getElementById(outCanvasId);
+  outputCanvas.width = inputCanvas.width;
+  outputCanvas.height = inputCanvas.height;
+  const ctx = outputCanvas.getContext('2d');
+  ctx.drawImage(outCanvas, 0, 0, outputCanvas.width, outputCanvas.height);
+}
+
+function showPerfResult(medianComputeTime = undefined) {
+  $('#loadTime').html(`${loadTime} ms`);
+  $('#buildTime').html(`${buildTime} ms`);
+  if (medianComputeTime !== undefined) {
+    $('#computeLabel').html('Median inference time:');
+    $('#computeTime').html(`${medianComputeTime} ms`);
+  } else {
+    $('#computeLabel').html('Inference time:');
+    $('#computeTime').html(`${computeTime} ms`);
+  }
+}
+
+function addWarning(msg) {
+  const div = document.createElement('div');
+  div.setAttribute('class', 'alert alert-warning alert-dismissible fade show');
+  div.setAttribute('role', 'alert');
+  div.innerHTML = msg;
+  const container = document.getElementById('container');
+  container.insertBefore(div, container.childNodes[0]);
+}
+
+export async function main() {
+  try {
+    let start;
+    // Set 'numRuns' param to run inference multiple times
+    const params = new URLSearchParams(location.search);
+    let numRuns = params.get('numRuns');
+    numRuns = numRuns === null ? 1 : parseInt(numRuns);
+
+    if (numRuns < 1) {
+      addWarning('The value of param numRuns must be greater than or equal' +
+          ' to 1.');
+      return;
+    }
+    // Only do load() and build() when model first time loads,
+    // there's new model choosed, and device backend changed
+    if (isFirstTimeLoad || isModelChanged ||
+        lastDevicePreference != devicePreference) {
+      if (lastDevicePreference != devicePreference) {
+        // Set polyfill backend
+        await utils.setPolyfillBackend(devicePreference);
+        lastDevicePreference = devicePreference;
+      }
+      if (fastStyleTransferNet !== undefined) {
+        // Call dispose() to and avoid memory leak
+        fastStyleTransferNet.dispose();
+      }
+      fastStyleTransferNet = new FastStyleTransferNet();
+      outputBuffer = new Float32Array(
+          utils.sizeOfShape(fastStyleTransferNet.outputDimensions));
+      isFirstTimeLoad = false;
+      isModelChanged = false;
+      console.log(`- Model ID: ${modelId} -`);
+      // UI shows model loading progress
+      await showProgressComponent('current', 'pending', 'pending');
+      console.log('- Loading weights... ');
+      start = performance.now();
+      const outputOperand =
+          await fastStyleTransferNet.load(devicePreference, modelId);
+      loadTime = (performance.now() - start).toFixed(2);
+      console.log(`  done in ${loadTime} ms.`);
+      // UI shows model building progress
+      await showProgressComponent('done', 'current', 'pending');
+      console.log('- Building... ');
+      start = performance.now();
+      fastStyleTransferNet.build(outputOperand);
+      buildTime = (performance.now() - start).toFixed(2);
+      console.log(`  done in ${buildTime} ms.`);
+    }
+    // UI shows inferencing progress
+    await showProgressComponent('done', 'done', 'current');
+
+    if (inputType === 'video') {
+      if (!player) {
+        const conf = {
+          key: 'yolo',
+          playback: {
+            autoplay: true,
+            muted: true,
+          },
+          location: {
+            ui: 'https://cdn.bitmovin.com/player/web/8/bitmovinplayer-ui.js',
+            ui_css: 'https://cdn.bitmovin.com/player/web/8/bitmovinplayer-ui.css',
+          },
+          adaptation: {
+            preload: false,
+          },
+        };
+
+        // eslint-disable-next-line max-len
+        player = new window.bitmovin.player.Player(document.getElementById('player'), conf);
+        const source = {
+          // eslint-disable-next-line max-len
+          dash: '//bitmovin-a.akamaihd.net/content/MI201109210084_1/mpds/f08e80da-bf1d-4e3d-8899-f0f6155f6efa.mpd',
+        };
+        player.load(source).then(function() {
+          const qualities = player.getAvailableVideoQualities();
+          player.setVideoQuality(qualities[0].id);
+          player.preload();
+          videoElement = player.getVideoElement();
+          renderVideoFrames();
+        });
+      } else {
+        renderVideoFrames();
+      }
+
+      await showProgressComponent('done', 'done', 'done');
+      readyShowResultComponents();
+    } else {
+      throw Error(`Unknown inputType ${inputType}`);
+    }
+  } catch (error) {
+    console.log(error);
+    addWarning(error.message);
+  }
+}
