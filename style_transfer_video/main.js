@@ -86,8 +86,6 @@ async function renderVideoFrame(videoElement) {
     fastStyleTransferNet.compute(inputBuffer, outputBuffer);
     computeTime = (performance.now() - start).toFixed(2);
     console.log(`  done in ${computeTime} ms.`);
-    videoElement.width = videoElement.videoWidth;
-    videoElement.height = videoElement.videoHeight;
     drawFromImageSource(videoElement, 'inputCanvas');
     showPerfResult();
     const inputCanvas = document.getElementById('inputCanvas');
