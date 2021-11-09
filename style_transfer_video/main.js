@@ -248,14 +248,23 @@ export async function main() {
 
       // eslint-disable-next-line max-len
       player = new window.bitmovin.player.Player(document.getElementById('player'), conf);
+
       const source = {
         // eslint-disable-next-line max-len
         dash: '//bitmovin-a.akamaihd.net/content/MI201109210084_1/mpds/f08e80da-bf1d-4e3d-8899-f0f6155f6efa.mpd',
       };
+
       player.load(source).then(function() {
         const qualities = player.getAvailableVideoQualities();
         player.setVideoQuality(qualities[0].id);
         player.preload();
+
+        const outputCanvas = document.createElement('canvas');
+        outputCanvas.id = 'outputCanvas';
+        const playerDiv = document.querySelector('#player');
+        playerDiv.insertBefore(outputCanvas, playerDiv.firstChild);
+        player.getVideoElement().hidden = true;
+
         renderVideoFrame(player.getVideoElement());
       });
 
