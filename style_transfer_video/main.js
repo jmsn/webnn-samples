@@ -236,7 +236,7 @@ export async function main() {
       const conf = {
         key: 'yolo',
         playback: {
-          autoplay: true,
+          // autoplay: true,
           muted: true,
         },
         location: {
