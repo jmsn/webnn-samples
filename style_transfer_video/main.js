@@ -65,6 +65,7 @@ $('#gallery .gallery-item').click(async (e) => {
 
 async function renderVideoFrame(videoElement) {
   if (!window.enabled) {
+    $('#fps').hide();
     drawFromImageSource(videoElement, 'outputCanvas');
     frameReq = videoElement.requestVideoFrameCallback(function() {
       renderVideoFrame(videoElement);
@@ -88,6 +89,7 @@ async function renderVideoFrame(videoElement) {
         inputCanvas.width,
         inputCanvas.height,
     );
+    $('#fps').show();
     $('#fps').text(`${(1000/computeTime).toFixed(0)} FPS`);
     frameReq = videoElement.requestVideoFrameCallback(function() {
       renderVideoFrame(videoElement);
