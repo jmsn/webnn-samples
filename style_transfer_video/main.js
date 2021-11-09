@@ -18,6 +18,7 @@ let outputBuffer;
 let devicePreference = 'gpu';
 let lastDevicePreference = '';
 let player;
+window.enabled = true;
 
 $(document).ready(() => {
   $('.icdisplay').hide();
@@ -63,28 +64,35 @@ $('#gallery .gallery-item').click(async (e) => {
 });
 
 async function renderVideoFrame(videoElement) {
-  const inputBuffer =
-        utils.getInputTensor(videoElement, fastStyleTransferNet.inputOptions);
-  console.log('- Computing... ');
-  const start = performance.now();
-  fastStyleTransferNet.compute(inputBuffer, outputBuffer);
-  computeTime = (performance.now() - start).toFixed(2);
-  console.log(`  done in ${computeTime} ms.`);
-  videoElement.width = videoElement.videoWidth;
-  videoElement.height = videoElement.videoHeight;
-  drawFromImageSource(videoElement, 'inputCanvas');
-  showPerfResult();
-  const inputCanvas = document.getElementById('inputCanvas');
-  drawImageData(
-      bufferToImageData(outputBuffer),
-      'outputCanvas',
-      inputCanvas.width,
-      inputCanvas.height,
-  );
-  $('#fps').text(`${(1000/computeTime).toFixed(0)} FPS`);
-  frameReq = videoElement.requestVideoFrameCallback(function() {
-    renderVideoFrame(videoElement);
-  });
+  if (!window.enabled) {
+    drawFromImageSource(videoElement, 'outputCanvas');
+    frameReq = videoElement.requestVideoFrameCallback(function() {
+      renderVideoFrame(videoElement);
+    });
+  } else {
+    const inputBuffer =
+          utils.getInputTensor(videoElement, fastStyleTransferNet.inputOptions);
+    console.log('- Computing... ');
+    const start = performance.now();
+    fastStyleTransferNet.compute(inputBuffer, outputBuffer);
+    computeTime = (performance.now() - start).toFixed(2);
+    console.log(`  done in ${computeTime} ms.`);
+    videoElement.width = videoElement.videoWidth;
+    videoElement.height = videoElement.videoHeight;
+    drawFromImageSource(videoElement, 'inputCanvas');
+    showPerfResult();
+    const inputCanvas = document.getElementById('inputCanvas');
+    drawImageData(
+        bufferToImageData(outputBuffer),
+        'outputCanvas',
+        inputCanvas.width,
+        inputCanvas.height,
+    );
+    $('#fps').text(`${(1000/computeTime).toFixed(0)} FPS`);
+    frameReq = videoElement.requestVideoFrameCallback(function() {
+      renderVideoFrame(videoElement);
+    });
+  }
 }
 
 function drawFromImageSource(srcElement, canvasId) {
