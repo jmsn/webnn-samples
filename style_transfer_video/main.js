@@ -64,7 +64,7 @@ $('#gallery .gallery-item').click(async (e) => {
 
 async function renderVideoFrame(videoElement) {
   const inputBuffer =
-      utils.getInputTensor(videoElement, fastStyleTransferNet.inputOptions);
+        utils.getInputTensor(videoElement, fastStyleTransferNet.inputOptions);
   console.log('- Computing... ');
   const start = performance.now();
   fastStyleTransferNet.compute(inputBuffer, outputBuffer);
@@ -72,28 +72,34 @@ async function renderVideoFrame(videoElement) {
   console.log(`  done in ${computeTime} ms.`);
   videoElement.width = videoElement.videoWidth;
   videoElement.height = videoElement.videoHeight;
-  drawInput(videoElement, 'inputCanvas');
+  drawFromImageSource(videoElement, 'inputCanvas');
   showPerfResult();
-  drawOutput('inputCanvas', 'outputCanvas');
+  const inputCanvas = document.getElementById('inputCanvas');
+  drawImageData(
+      bufferToImageData(outputBuffer),
+      'outputCanvas',
+      inputCanvas.width,
+      inputCanvas.height,
+  );
   $('#fps').text(`${(1000/computeTime).toFixed(0)} FPS`);
   frameReq = videoElement.requestVideoFrameCallback(function() {
     renderVideoFrame(videoElement);
   });
 }
 
-function drawInput(srcElement, canvasId) {
-  const inputCanvas = document.getElementById(canvasId);
+function drawFromImageSource(srcElement, canvasId) {
+  const canvas = document.getElementById(canvasId);
   const resizeRatio = Math.max(
       Math.max(srcElement.width / maxWidth, srcElement.height / maxHeight), 1);
   const scaledWidth = Math.floor(srcElement.width / resizeRatio);
   const scaledHeight = Math.floor(srcElement.height / resizeRatio);
-  inputCanvas.height = scaledHeight;
-  inputCanvas.width = scaledWidth;
-  const ctx = inputCanvas.getContext('2d');
+  canvas.height = scaledHeight;
+  canvas.width = scaledWidth;
+  const ctx = canvas.getContext('2d');
   ctx.drawImage(srcElement, 0, 0, scaledWidth, scaledHeight);
 }
 
-function drawOutput(inCanvasId, outCanvasId) {
+function bufferToImageData(buffer) {
   const outputSize = fastStyleTransferNet.outputDimensions;
   const height = outputSize[2];
   const width = outputSize[3];
@@ -104,28 +110,44 @@ function drawOutput(inCanvasId, outCanvasId) {
 
   for (let i = 0; i < height * width; ++i) {
     const j = i * 4;
-    const r = outputBuffer[i] * mean[0] + offset[0];
-    const g = outputBuffer[i + height * width] * mean[1] + offset[1];
-    const b = outputBuffer[i + height * width * 2] * mean[2] + offset[2];
+    const r = buffer[i] * mean[0] + offset[0];
+    const g = buffer[i + height * width] * mean[1] + offset[1];
+    const b = buffer[i + height * width * 2] * mean[2] + offset[2];
     bytes[j + 0] = Math.round(r);
     bytes[j + 1] = Math.round(g);
     bytes[j + 2] = Math.round(b);
     bytes[j + 3] = Math.round(a);
   }
 
-  const imageData = new ImageData(bytes, width, height);
-  const outCanvas = document.createElement('canvas');
-  const outCtx = outCanvas.getContext('2d');
-  outCanvas.width = width;
-  outCanvas.height = height;
-  outCtx.putImageData(imageData, 0, 0, 0, 0, outCanvas.width, outCanvas.height);
+  return {
+    data: new ImageData(bytes, width, height),
+    height,
+    width,
+  };
+}
 
-  const inputCanvas = document.getElementById(inCanvasId);
+function drawImageData(img, outCanvasId, canvasWidth, canvasHeight) {
+  const tmpCanvas = document.createElement('canvas');
+  tmpCanvas.width = img.width;
+  tmpCanvas.height = img.height;
+
+  const outCtx = tmpCanvas.getContext('2d');
+  outCtx.putImageData(
+      img.data,
+      0,
+      0,
+      0,
+      0,
+      tmpCanvas.width,
+      tmpCanvas.height,
+  );
+
   const outputCanvas = document.getElementById(outCanvasId);
-  outputCanvas.width = inputCanvas.width;
-  outputCanvas.height = inputCanvas.height;
+  outputCanvas.width = canvasWidth;
+  outputCanvas.height = canvasHeight;
+
   const ctx = outputCanvas.getContext('2d');
-  ctx.drawImage(outCanvas, 0, 0, outputCanvas.width, outputCanvas.height);
+  ctx.drawImage(tmpCanvas, 0, 0, outputCanvas.width, outputCanvas.height);
 }
 
 function showPerfResult(medianComputeTime = undefined) {
@@ -228,6 +250,8 @@ export async function main() {
         player.preload();
         renderVideoFrame(player.getVideoElement());
       });
+
+      window.player = player;
     } else {
       renderVideoFrame(player.getVideoElement());
     }
