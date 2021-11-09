@@ -37,6 +37,10 @@ $('#deviceBtns .btn').on('change', async (e) => {
 
 $('#onoffBtns .btn').on('change', async (e) => {
   enabled = $(e.target).attr('id') === 'on';
+
+  if (player) {
+    renderVideoFrame(player.getVideoElement());
+  }
 });
 
 $('#gallery .gallery-image').hover((e) => {
