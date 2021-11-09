@@ -18,7 +18,7 @@ let outputBuffer;
 let devicePreference = 'gpu';
 let lastDevicePreference = '';
 let player;
-window.enabled = true;
+let enabled = true;
 
 $(document).ready(() => {
   $('.icdisplay').hide();
@@ -33,6 +33,10 @@ $('#deviceBtns .btn').on('change', async (e) => {
   }
 
   await main();
+});
+
+$('#onoffBtns .btn').on('change', async (e) => {
+  enabled = $(e.target).attr('id') === 'on';
 });
 
 $('#gallery .gallery-image').hover((e) => {
@@ -64,7 +68,7 @@ $('#gallery .gallery-item').click(async (e) => {
 });
 
 async function renderVideoFrame(videoElement) {
-  if (!window.enabled) {
+  if (!enabled) {
     $('#fps').hide();
     drawFromImageSource(videoElement, 'outputCanvas');
     frameReq = videoElement.requestVideoFrameCallback(function() {
