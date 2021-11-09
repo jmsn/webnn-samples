@@ -272,6 +272,7 @@ export async function main() {
         const playerDiv = document.querySelector('#player');
         playerDiv.insertBefore(outputCanvas, playerDiv.firstChild);
         player.getVideoElement().hidden = true;
+        playerDiv.style['min-width'] = 700;
 
         renderVideoFrame(player.getVideoElement());
       });
