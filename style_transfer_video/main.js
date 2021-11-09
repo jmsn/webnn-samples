@@ -264,7 +264,7 @@ export async function main() {
 
       player.load(source).then(function() {
         const qualities = player.getAvailableVideoQualities();
-        player.setVideoQuality(qualities[0].id);
+        player.setVideoQuality(qualities[2].id);
         player.preload();
 
         const outputCanvas = document.createElement('canvas');
